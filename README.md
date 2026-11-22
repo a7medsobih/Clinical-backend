@@ -1,39 +1,83 @@
-# CMS & CRUD Backend Template
+# Clinical – Backend (API)
 
-A reusable Node.js and Express backend template for CMS and CRUD applications. It includes ready-to-use database, authentication, media upload, and security configuration. The `team` module is a practical CRUD example that can be copied and adapted for new resources.
+The API of **Clinical**, a clinic appointment booking website (CS508 graduation project).
+The website itself lives in the `Clinical` folder.
 
-## Tech Stack
+**Stack:** Node.js + Express 5, Prisma + PostgreSQL (Supabase), bcryptjs, jsonwebtoken, multer, nodemailer, node-cron, cors, dotenv. JavaScript (ES modules) only.
 
-- Node.js and Express 5
-- MongoDB and Mongoose
-- JWT and bcryptjs for administrator authentication
-- Cloudinary and Multer for image and file uploads
-- Zod for request validation
-- Helmet, CORS, and express-rate-limit for baseline security
+## Run it
 
-## Project Structure
-
-```text
-src/
-  config/        Database, authentication, Cloudinary, and CORS configuration
-  middlewares/   Authentication and error-handling middleware
-  modules/       Independent modules: auth, media, and team (CRUD example)
-  app.js         Express setup and route registration
-  server.js      Application entry point
-```
-
-`ADMIN_EMAIL` and `ADMIN_PASSWORD` are only required when running the initial administrator seed command. Multiple allowed client origins can be separated with commas in `CLIENT_URL`.
-
-## Running the Project
+1. Copy `.env.example` to `.env`. From Supabase (Project Settings → Database → Connection string) fill in:
+   - `DATABASE_URL`: the pooled connection (port 6543, ends with `?pgbouncer=true`), used by the app.
+   - `DIRECT_URL`: the direct connection (port 5432), used by migrations.
+2. Install, create the tables and add the first data:
 
 ```bash
 npm install
-npm run seed:admin
-npm run dev
+npx prisma migrate deploy   # creates the 12 tables
+npm run db:seed             # admin, specialties and demo data
+npm run dev                 # http://localhost:5001/api/health
 ```
 
-Use `npm start` for normal production-style startup. The health check is available at `GET /api/v1/health`.
+The tables already exist on the team's Supabase project, so usually only `npm install` and `npm run dev` are needed.
 
-## Reuse in a New Project
+The seed creates these accounts:
 
-Copy the `src/modules/team` structure to create a new resource, then register its router in `src/app.js`. Keep the `model`, `schema`, `service`, `controller`, and `routes` layers to make each module isolated and easy to reuse.
+| Role | E-mail | Password |
+|---|---|---|
+| Admin | admin@clinical.com | Admin@123 |
+| Doctor (demo) | doctor@clinical.com | Doctor@123 |
+| Patient (demo) | patient@clinical.com | Patient@123 |
+
+In development `SMTP_HOST` is empty, so e-mails (doctor passwords, booking confirmations, reminders) are **printed in the console**.
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | start with auto-reload (nodemon) |
+| `npm start` | start normally |
+| `npm run db:migrate` | after changing `prisma/schema.prisma`: create and apply a new migration |
+| `npm run db:seed` | add the admin, specialties and demo data |
+| `npm run db:reset` | delete everything and start again (**deletes all Supabase data**) |
+| `npm test` | Jest + Supertest tests: login, booking, history rule (needs the seeded database; they add and then remove one booking) |
+
+## Folders
+
+```
+prisma/
+  schema.prisma        the 12 tables
+  seed.js              admin + specialties + demo doctors / patient
+src/
+  index.js             express app, routes, one error handler, starts the reminder job
+  prisma.js            the Prisma client
+  middleware/          auth.js (verifyToken, allowRoles), upload.js (multer)
+  utils/               email.js, notify.js, slots.js (dates, times and free slots)
+  routes/              one file per module
+  controllers/         one file per module (same names)
+uploads/               uploaded files, served at /uploads
+tests/                 api.test.js
+docs/                  Clinical.postman_collection.json
+```
+
+Flow: **route → controller → prisma**. Success responses are `{ data }`, errors are `{ message }` with the right status code.
+
+## Modules
+
+| # | Module | Files |
+|---|---|---|
+| 1 | Auth + Admin | `auth.*`, `admin.*` |
+| 2 | Doctors | `doctors.*` |
+| 3 | Appointments + waiting list | `appointments.*` |
+| 4 | Records (history, diagnoses, reviews) | `records.*` |
+| 5 | Notifications + doctor dashboard + reminder cron | `notifications.*` |
+
+Import `docs/Clinical.postman_collection.json` into Postman to try every endpoint. Run the three "Login as …" requests first: they save the tokens.
+
+## Small notes
+
+- Row Level Security is turned on for every table (see the first migration). The backend connects as the `postgres` user, which is not limited by RLS, but Supabase's public Data API (anon key) cannot read the tables. Keep RLS on for any new table.
+- Text search uses `mode: "insensitive"`, because PostgreSQL compares text with upper / lower case.
+- Dates are `"YYYY-MM-DD"` strings and times are `"HH:MM"` strings.
+- A cancelled appointment frees its time: when someone books that time again, the old cancelled row is removed so the unique key (doctorId + date + time) allows the new booking.
+- Two small additions to the documented tables: `notifications.link` (the page that opens when the notification is clicked) and `waitingList.notifiedAt` (to check the 30-minute window).
