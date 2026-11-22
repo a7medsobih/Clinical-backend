@@ -1,0 +1,232 @@
+// Clinical database – 12 tables, same as the documentation mapping.
+// Dates are "YYYY-MM-DD" strings and times are "HH:MM" strings,
+// so they are easy to compare and to explain.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Supabase (PostgreSQL).
+// DATABASE_URL = the pooled connection (port 6543) used by the app.
+// DIRECT_URL   = the direct connection (port 5432) used by migrations.
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  patient
+  doctor
+  admin
+}
+
+enum UserStatus {
+  active
+  blocked
+}
+
+enum AppointmentStatus {
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+enum BookingType {
+  online
+  contact_clinic
+}
+
+enum WaitingStatus {
+  waiting
+  notified
+  booked
+  expired
+}
+
+// 1. users – every person who can log in
+model User {
+  id        Int        @id @default(autoincrement())
+  name      String
+  email     String     @unique
+  password  String
+  phone     String?
+  role      Role       @default(patient)
+  status    UserStatus @default(active)
+  createdAt DateTime   @default(now())
+
+  patient       Patient?
+  doctor        Doctor?        @relation("DoctorUser")
+  addedDoctors  Doctor[]       @relation("AddedBy")
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// 2. patients – extra data for a patient (userId is also the patient id)
+model Patient {
+  userId      Int     @id
+  dateOfBirth String?
+  gender      String?
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+  waitingList  WaitingList[]
+
+  @@map("patients")
+}
+
+// 3. doctors – extra data for a doctor (userId is also the doctor id)
+model Doctor {
+  userId        Int      @id
+  specialtyId   Int
+  bio           String?  @db.Text
+  fee           Int      @default(0)
+  dailyLimit    Int      @default(20)
+  syndicateCard String
+  addedById     Int?
+  addedAt       DateTime @default(now())
+
+  user         User          @relation("DoctorUser", fields: [userId], references: [id], onDelete: Cascade)
+  specialty    Specialty     @relation(fields: [specialtyId], references: [id])
+  addedBy      User?         @relation("AddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  clinic       Clinic?
+  schedules    Schedule[]
+  appointments Appointment[]
+  waitingList  WaitingList[]
+
+  @@map("doctors")
+}
+
+// 4. specialties
+model Specialty {
+  id      Int      @id @default(autoincrement())
+  name    String   @unique
+  doctors Doctor[]
+
+  @@map("specialties")
+}
+
+// 5. clinics – one clinic per doctor
+model Clinic {
+  id        Int     @id @default(autoincrement())
+  doctorId  Int     @unique
+  name      String
+  address   String
+  latitude  Float?
+  longitude Float?
+  phone     String?
+  whatsapp  String?
+  facebook  String?
+  instagram String?
+
+  doctor Doctor @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+
+  @@map("clinics")
+}
+
+// 6. schedules – one row per working day (dayOfWeek: 0 = Sunday ... 6 = Saturday)
+model Schedule {
+  id          Int    @id @default(autoincrement())
+  doctorId    Int
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
+  slotMinutes Int    @default(20)
+
+  doctor Doctor @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+// 7. appointments – the unique key stops two bookings at the same time
+model Appointment {
+  id          Int               @id @default(autoincrement())
+  patientId   Int
+  doctorId    Int
+  date        String
+  time        String
+  status      AppointmentStatus @default(confirmed)
+  bookingType BookingType       @default(online)
+  createdAt   DateTime          @default(now())
+
+  patient   Patient    @relation(fields: [patientId], references: [userId], onDelete: Cascade)
+  doctor    Doctor     @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+  diagnosis Diagnosis?
+  review    Review?
+
+  @@unique([doctorId, date, time])
+  @@map("appointments")
+}
+
+// 8. waitingList – patients waiting for a full day
+model WaitingList {
+  id         Int           @id @default(autoincrement())
+  patientId  Int
+  doctorId   Int
+  date       String
+  position   Int
+  status     WaitingStatus @default(waiting)
+  notifiedAt DateTime?
+  createdAt  DateTime      @default(now())
+
+  patient Patient @relation(fields: [patientId], references: [userId], onDelete: Cascade)
+  doctor  Doctor  @relation(fields: [doctorId], references: [userId], onDelete: Cascade)
+
+  @@map("waiting_list")
+}
+
+// 9. diagnoses – one diagnosis per appointment
+model Diagnosis {
+  id            Int     @id @default(autoincrement())
+  appointmentId Int     @unique
+  description   String  @db.Text
+  prescription  String? @db.Text
+  notes         String? @db.Text
+
+  appointment Appointment  @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
+
+  @@map("diagnoses")
+}
+
+// 10. attachments – files uploaded with a diagnosis
+model Attachment {
+  id          Int    @id @default(autoincrement())
+  diagnosisId Int
+  fileName    String
+  filePath    String
+  fileType    String
+
+  diagnosis Diagnosis @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+// 11. reviews – one review per completed appointment
+model Review {
+  id            Int     @id @default(autoincrement())
+  appointmentId Int     @unique
+  rating        Int
+  comment       String? @db.Text
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
+
+// 12. notifications – link is the page to open when the user clicks it
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  title     String
+  message   String   @db.Text
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
