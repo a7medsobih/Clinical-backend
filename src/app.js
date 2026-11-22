@@ -15,7 +15,22 @@ import { sendReminders } from "./controllers/notifications.controller.js";
 
 const app = express();
 
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5174" }));
+// CLIENT_URL may contain one origin or a comma-separated list (for example,
+// the production frontend and the local Vite app). CORS requires returning one
+// matching origin, never the raw comma-separated environment value.
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5174")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error("Origin is not allowed by CORS"));
+    },
+  }),
+);
 app.use(express.json());
 
 // Uploaded files (syndicate cards, diagnosis attachments)

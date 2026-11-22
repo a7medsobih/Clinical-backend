@@ -37,7 +37,7 @@ Project → Settings → Environment Variables. Do not commit their values to Gi
 | `DATABASE_URL` | Supabase pooled connection string (port `6543`, with `pgbouncer=true`) |
 | `DIRECT_URL` | Supabase direct connection string (port `5432`) |
 | `JWT_SECRET` | a long, random secret |
-| `CLIENT_URL` | the deployed frontend URL, without a trailing slash |
+| `CLIENT_URL` | the deployed frontend URL, without a trailing slash; use commas to allow more than one origin |
 | `CRON_SECRET` | a different long, random secret |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | production mail provider values, if e-mail is enabled |
 
