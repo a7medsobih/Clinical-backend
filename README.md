@@ -21,6 +21,39 @@ npm run dev                 # http://localhost:5001/api/health
 
 The tables already exist on the team's Supabase project, so usually only `npm install` and `npm run dev` are needed.
 
+## Deploy on Vercel
+
+This repository is ready to deploy as a Vercel Serverless Function. The API health-check URL is:
+
+```
+https://YOUR-PROJECT.vercel.app/api/health
+```
+
+Before redeploying, add these **Production** environment variables in Vercel →
+Project → Settings → Environment Variables. Do not commit their values to Git:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Supabase pooled connection string (port `6543`, with `pgbouncer=true`) |
+| `DIRECT_URL` | Supabase direct connection string (port `5432`) |
+| `JWT_SECRET` | a long, random secret |
+| `CLIENT_URL` | the deployed frontend URL, without a trailing slash |
+| `CRON_SECRET` | a different long, random secret |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | production mail provider values, if e-mail is enabled |
+
+`vercel.json` runs the reminder task at 18:00 UTC every day (20:00 in Cairo
+while Egypt is UTC+2). Vercel calls the protected `/api/cron/reminders` endpoint;
+do not call it from the frontend.
+
+### Important: uploaded files
+
+Vercel Functions have no persistent writable `uploads/` directory. The current
+Multer disk storage is suitable for local development only. Before enabling
+doctor-card or diagnosis-file uploads in production, move those uploads to
+durable object storage (for example a private Vercel Blob, Supabase Storage, or
+S3) and store the resulting URL/key in the database. Do not store medical files
+in a public bucket.
+
 The seed creates these accounts:
 
 | Role | E-mail | Password |

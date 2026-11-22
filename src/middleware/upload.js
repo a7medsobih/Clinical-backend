@@ -4,12 +4,20 @@ import fs from "fs";
 import path from "path";
 import multer from "multer";
 
-fs.mkdirSync("uploads", { recursive: true });
+// Vercel Functions can only write temporary files under /tmp. Files uploaded
+// there must still be copied to durable object storage before production use.
+const uploadDirectory = process.env.VERCEL ? "/tmp/clinical-uploads" : "uploads";
+
+if (!process.env.VERCEL) {
+  fs.mkdirSync(uploadDirectory, { recursive: true });
+}
 
 const allowedTypes = [".pdf", ".jpg", ".jpeg", ".png"];
 
 const storage = multer.diskStorage({
-  destination: "uploads/",
+  destination: (req, file, cb) => {
+    fs.mkdir(uploadDirectory, { recursive: true }, (error) => cb(error, uploadDirectory));
+  },
   // A unique name, e.g. 1731660000000-482913.pdf
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
